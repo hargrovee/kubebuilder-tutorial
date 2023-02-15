@@ -18,7 +18,9 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"github.com/go-logr/logr"
+	"github.com/robfig/cron/v3"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sort"
@@ -30,7 +32,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	batch "tidy/api/v1"
+	batchv1 "tidy/api/v1"
 )
 
 // CronJobReconciler reconciles a CronJob object
@@ -77,7 +79,7 @@ func (r *CronJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 	log := r.Log.WithValues("cronjob", req.NamespacedName)
 
-	var cronJob batch.CronJob
+	var cronJob batchv1.CronJob
 	if err := r.Get(ctx, req.NamespacedName, &cronJob); err != nil {
 		log.Error(err, "unable to fetch CronJob")
 		//	ignore not-found error which can not be fixup by requeue
@@ -219,12 +221,69 @@ func (r *CronJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, nil
 	}
 
+	// getNextSchedule
+	getNextSchedule := func(cronJob *batchv1.CronJob, now time.Time) (lastMissed time.Time, next time.Time,
+		err error) {
+		sched, err := cron.ParseStandard(cronJob.Spec.Schedule)
+		if err != nil {
+			return time.Time{}, time.Time{}, fmt.Errorf("Unparseable schedule %q: %v",
+				cronJob.Spec.Schedule, err)
+		}
+
+		//	for optimization purpose, cheat a bit and start from our last observed run time
+		//	we could reconstitute this here, but there's not much point, since we've
+		//	just update it.
+		var earliestTime time.Time
+		if cronJob.Status.LastScheduleTime != nil {
+			earliestTime = cronJob.Status.LastScheduleTime.Time
+		} else {
+			earliestTime = cronJob.ObjectMeta.CreationTimestamp.Time
+		}
+		if cronJob.Spec.StartingDeadlineSeconds != nil {
+			//	controller is not going to schedule anything below this point
+			schedulingDeadline := now.Add(-time.Second * time.Duration(*cronJob.Spec.StartingDeadlineSeconds))
+
+			if schedulingDeadline.After(earliestTime) {
+				earliestTime = schedulingDeadline
+			}
+		}
+		if earliestTime.After(now) {
+			return time.Time{}, sched.Next(now), nil
+		}
+
+		starts := 0
+		for t := sched.Next(earliestTime); !t.After(now); t = sched.Next(t) {
+			lastMissed = t
+			starts++
+			if starts > 100 {
+				//	We can't get the most recent times so just return an empty slice
+				return time.Time{}, time.Time{}, fmt.Errorf("Too many missed start " +
+					"times (>100). Set or decrease .spec.startingDeadlineSeconds or check" +
+					"clock skew.")
+			}
+		}
+		return lastMissed, sched.Next(now), nil
+	}
+
+	// figure out the next times that we need to create
+	// jobs at (or anything we missed).
+	missedRun, nextRun, err := getNextSchedule(&cronJob, r.Now())
+	if err != nil {
+		log.Error(err, "unable to figure our CronJob schedule")
+		//	we don't really care about requeuing until we get an update that
+		// fixes the schedule, so don't return an error
+		return ctrl.Result{}, nil
+	}
+
+	scheduledResult := ctrl.Result{RequeueAfter: nextRun.Sub(r.Now())} // save this so we can re-use it elsewhere
+	log = log.WithValues("now", r.Now(), "next run", nextRun)
+
 	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *CronJobReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&batch.CronJob{}).
+		For(&batchv1.CronJob{}).
 		Complete(r)
 }
