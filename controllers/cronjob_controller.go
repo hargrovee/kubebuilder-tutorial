@@ -49,8 +49,8 @@ func (_ realClock) Now() time.Time {
 	return time.Now()
 }
 
-// clock接口可以获取当前的时间
-// 可以帮助我们在测试中模拟计时
+// clock knows how to get the current time.
+// It can be used to fake out timing for testing.
 type Clock interface {
 	Now() time.Time
 }
