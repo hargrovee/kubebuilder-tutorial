@@ -19,10 +19,10 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"github.com/go-logr/logr"
 	"github.com/robfig/cron/v3"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sort"
 	"time"
 
@@ -38,7 +38,6 @@ import (
 // CronJobReconciler reconciles a CronJob object
 type CronJobReconciler struct {
 	client.Client
-	Log    logr.Logger
 	Scheme *runtime.Scheme
 	Clock
 }
@@ -75,9 +74,8 @@ var (
 	scheduledTimeAnnotation = "batch.tutorial.kubebuilder.io/scheduled-at"
 )
 
-func (r *CronJobReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx := context.Background()
-	log := r.Log.WithValues("cronjob", req.NamespacedName)
+func (r *CronJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	log := log.FromContext(ctx)
 
 	var cronJob batchv1.CronJob
 	if err := r.Get(ctx, req.NamespacedName, &cronJob); err != nil {
