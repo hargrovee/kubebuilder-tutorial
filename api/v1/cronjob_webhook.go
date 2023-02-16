@@ -48,8 +48,8 @@ func (r *CronJob) Default() {
 	cronjoblog.Info("default", "name", r.Name)
 
 	// TODO(user): fill in your defaulting logic.
-	if r.Spec.ConcurrentPolicy == "" {
-		r.Spec.ConcurrentPolicy = AllowConcurrent
+	if r.Spec.ConcurrencyPolicy == "" {
+		r.Spec.ConcurrencyPolicy = AllowConcurrent
 	}
 	if r.Spec.Subpend == nil {
 		r.Spec.Subpend = new(bool)

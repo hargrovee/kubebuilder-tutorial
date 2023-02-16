@@ -17,7 +17,7 @@ limitations under the License.
 package v1
 
 import (
-	batchv1beata1 "k8s.io/api/batch/v1beta1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -48,7 +48,7 @@ type CronJobSpec struct {
 	//	- "Forbid": forbids concurrent runs, skipping next run if previous run hasn't  finished yet;
 	//- "Replace": cancels currently running job and replaces it with a new one
 	//	+optional
-	ConcurrentPolicy ConcurrencyPolicy `json:"concurrentPolicy,omitempty"`
+	ConcurrencyPolicy ConcurrencyPolicy `json:"concurrencyPolicy,omitempty"`
 
 	//	This flag tells the controller to suspend subsequent executions, it does
 	//	not apply to already started executions. Default to false.
@@ -56,7 +56,7 @@ type CronJobSpec struct {
 	Subpend *bool `json:"subpend,omitempty"`
 
 	//	Specifies the job that will be created when executing a CronJob.
-	JobTemplate batchv1beata1.JobTemplateSpec `json:"jobTemplate"`
+	JobTemplate batchv1.JobTemplateSpec `json:"jobTemplate"`
 
 	//	+kubebuilder:validation:Minimum=0
 
